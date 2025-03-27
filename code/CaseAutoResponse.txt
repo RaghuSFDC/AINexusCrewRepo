@@ -1,0 +1,7 @@
+trigger CaseAutoResponse on Case (after insert) {
+    for (Case c : Trigger.new) {
+        if (c.Status == 'New') {
+            AIService.sendCaseToCohere(c.Id, c.Description, false);
+        }
+    }
+}

@@ -1,0 +1,63 @@
+public with sharing class KnowledgeService {
+    @future(callout=true)
+    public static void generateArticleFromCase(Id caseId, String caseDescription, Integer retryCount) {
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        
+        String openAPIKey = GenerateTokenService.fetchAPIKey();
+        System.debug('openAPIKey: ' + openAPIKey);
+        
+        request.setEndpoint('https://api.openai.com/v1/completions');
+        request.setMethod('POST');
+        request.setHeader('Authorization', 'Bearer ' + openAPIKey);
+        request.setHeader('Content-Type', 'application/json');
+        
+        // Prepare Payload
+        String body = '{"model": "gpt-4o", "prompt": "Generate a knowledge article for: ' + caseDescription + '", "max_tokens": 300}';
+        request.setBody(body);
+        System.debug('AI Req=' + body);
+
+        try {
+            HttpResponse response = http.send(request);
+            
+            if (response.getStatusCode() == 200) {
+                System.debug('AI Response=' + response.getBody());
+                Map<String, Object> result = (Map<String, Object>) JSON.deserializeUntyped(response.getBody());
+                List<Object> choices = (List<Object>) result.get('choices');
+                
+                if (choices.size() > 0) {
+                    Map<String, Object> choice = (Map<String, Object>) choices[0];
+                    String articleContent = (String) choice.get('text');
+                    insertKnowledgeArticle(articleContent, caseId);
+                }
+            } 
+            else if (response.getStatusCode() == 429 && retryCount < 3) {
+                System.debug('Rate limit exceeded. Retrying after delay... Attempt: ' + (retryCount + 1));
+                
+                // Retry by calling the future method again
+                Integer delaySeconds = (Integer) Math.pow(2, retryCount); // Exponential backoff
+                chainFutureCall(caseId, caseDescription, retryCount + 1, delaySeconds);
+            } 
+            else {
+                System.debug('Error Response: ' + response.getStatusCode() + ' - ' + response.getBody());
+            }
+        } catch (Exception e) {
+            System.debug('Error during API Call: ' + e.getMessage());
+        }
+    }
+
+    // Insert the generated knowledge article
+    public static void insertKnowledgeArticle(String content, Id caseId) {
+        Knowledge__kav article = new Knowledge__kav();
+        article.Title = 'AI-Generated Article for Case ' + caseId;
+        article.Article_Body__c = content;
+        insert article;
+    }
+
+    // Schedule a future call for retry
+    @future(callout=true)
+    public static void chainFutureCall(Id caseId, String caseDescription, Integer retryCount, Integer delaySeconds) {
+        // No direct delay, just invoke future again to simulate delay
+        generateArticleFromCase(caseId, caseDescription, retryCount);
+    }
+}

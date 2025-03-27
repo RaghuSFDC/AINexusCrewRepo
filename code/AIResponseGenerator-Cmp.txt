@@ -1,0 +1,87 @@
+<aura:component implements="force:appHostable,flexipage:availableForAllPageTypes,force:hasRecordId,flexipage:availableForRecordHome,force:hasRecordId" 
+                controller="AIService" access="global" >
+
+    <!-- Case Record ID Passed Automatically -->
+    <aura:attribute name="recordId" type="String" />
+    <aura:attribute name="caseDescription" type="String" />
+    <aura:attribute name="aiResponse" type="String" />
+    <aura:attribute name="isLoading" type="Boolean" default="false" />
+    
+    <!-- Main Card Wrapper -->
+    <lightning:card title="AI Case Assistant" iconName="standard:case" class="box">
+        <div class="slds-p-around_medium">
+
+            <!-- Box for Inputs -->
+            <div class="slds-box slds-theme_default slds-m-bottom_medium">
+                <lightning:input label="Enter Case Description" value="{!v.caseDescription}" />
+                
+                <!-- Button Section -->
+                <div class="slds-m-top_medium">
+                    <lightning:button label="Get AI Response" onclick="{!c.handleGetAIResponse}" variant="brand" />
+                </div>
+            </div>
+
+            <!-- Show Spinner While Loading -->
+            <aura:if isTrue="{!v.isLoading}">
+                <div class="slds-align_absolute-center">
+                    <lightning:spinner alternativeText="Loading..." size="medium" />
+                </div>
+            </aura:if>
+            
+            <!-- Box for AI Response -->
+            <aura:if isTrue="{!not(empty(v.aiResponse))}">
+                <div class="slds-box slds-theme_success slds-m-top_medium">
+                    <lightning:card title="AI Suggested Response" iconName="custom:custom63">
+                        <p class="slds-p-around_medium">{!v.aiResponse}</p>
+                    </lightning:card>
+                </div>
+            </aura:if>
+        </div>
+    </lightning:card>
+</aura:component>
+
+
+-----------Controller-----------
+({
+    handleGetAIResponse: function(component, event, helper) {
+        var caseId = component.get("v.recordId");
+        var caseDescription = component.get("v.caseDescription");
+        
+        // Validate Case Description
+        if (!caseDescription || caseDescription.trim() === '') {
+            alert('Please enter a case description.');
+            return;
+        }
+        
+        // Show loading spinner
+        component.set("v.isLoading", true);
+        
+        // Introduce 2-second delay before calling Apex
+        window.setTimeout(
+            $A.getCallback(function() {
+                // Call Apex Method after 2-second delay
+                var action = component.get("c.getAIResponse");
+                action.setParams({
+                    caseId: caseId,
+                    caseDescription: caseDescription
+                });
+                
+                action.setCallback(this, function(response) {
+                    var state = response.getState();
+                    
+                    if (state === "SUCCESS") {
+                        var result = response.getReturnValue();
+                        component.set("v.aiResponse", result);
+                        component.set("v.isLoading", false);
+                    } else {
+                        console.error("Error: " + response.getError()[0].message);
+                        component.set("v.isLoading", false);
+                    }
+                });
+                
+                $A.enqueueAction(action);
+            }), 
+            8000 // 2-second delay before API call
+        );
+    }
+})

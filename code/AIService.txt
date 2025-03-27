@@ -1,0 +1,81 @@
+public with sharing class AIService {
+    
+    @future(callout=true)
+    public static void sendCaseToCohere(Id caseId, String caseDescription, Boolean addtionalReq) {
+        Http http = new Http();
+        HttpRequest request = new HttpRequest();
+        
+        // Cohere API Key (replace with your valid key)
+         String cohereAPIKey = GenerateTokenService.fetchAPIKey();
+        
+        // Correct Cohere Endpoint
+        request.setEndpoint('https://api.cohere.ai/v1/generate');
+        request.setMethod('POST');
+        request.setHeader('Authorization', 'Bearer ' + cohereAPIKey);
+        request.setHeader('Content-Type', 'application/json');
+        
+        // Set Timeout to 120 seconds /120000
+        request.setTimeout(7000);//1min-60000, 10sec-10000
+        
+        // Correct Payload for Cohere Model
+        String body = '{"model": "command-xlarge", "prompt": "Classify and generate a response for: ' + caseDescription + '", "max_tokens": 150}';
+        request.setBody(body);
+        
+        HttpResponse response = http.send(request);
+        
+        if (response.getStatusCode() == 200) {
+            // Parse JSON Response
+            Map<String, Object> result = (Map<String, Object>) JSON.deserializeUntyped(response.getBody());
+            
+            // Get 'generations' list
+            List<Object> generations = (List<Object>) result.get('generations');
+            
+            if (generations != null && generations.size() > 0) {
+                // Get the first generation
+                Map<String, Object> generation = (Map<String, Object>) generations[0];
+                
+                // Extract the 'text' value
+                String aiResponse = (String) generation.get('text');
+                
+                // Log the extracted text for verification
+                System.debug('AI Response Text: ' + aiResponse);
+                
+                // Update case with AI-generated response
+                updateCaseWithAIResponse(caseId, aiResponse,addtionalReq);
+            } else {
+                System.debug('No generations found in response.');
+            }
+        } else {
+            System.debug('Error: ' + response.getBody());
+        }
+    }
+    
+    public static void updateCaseWithAIResponse(Id caseId, String aiResponse, Boolean additionalReq) {
+        Case c = [SELECT Id, AI_Suggested_Response__c, AI_Knowledge_Generated__c FROM Case WHERE Id = :caseId LIMIT 1];
+       
+        if(additionalReq){
+        c.AI_Suggested_Response__c = aiResponse;
+        }else{
+             c.AI_Suggested_Response__c = aiResponse;
+        }
+        update c;
+        System.debug('Case updated='+c);
+    }
+    
+    @AuraEnabled
+    public static String getAIResponse(String caseId, String caseDescription) {
+        System.debug('Case ID: ' + caseId);
+        System.debug('Case Description: ' + caseDescription);
+        
+        sendCaseToCohere(caseId, caseDescription, true);
+            
+            
+        // Simulate AI response for demonstration purposes
+        String aiResponse = 'For Case ID: ' + caseId + 
+                            ', regarding: "' + caseDescription + 
+                            '", please restart your device, check the Wi-Fi settings, and ensure that the router is working correctly.';
+        
+        // Return the generated response
+        return '';
+    }
+}

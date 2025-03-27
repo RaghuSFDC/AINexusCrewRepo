@@ -1,0 +1,7 @@
+trigger CaseToKnowledge on Case (after update) {
+    for (Case c : Trigger.new) {
+        if (c.Status == 'Closed' && c.AI_Knowledge_Generated__c == false) {
+            KnowledgeService.generateArticleFromCase(c.Id, c.Description, 0);
+        }
+    }
+}
